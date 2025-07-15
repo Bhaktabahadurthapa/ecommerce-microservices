@@ -20,18 +20,19 @@ services:
   # Frontend - Web UI (Go)
   frontend:
     build:
-      context: ./microservices-demo/src/frontend
+      context: ./src/frontend
     ports:
       - "8080:8080"
     environment:
       - PORT=8080
       - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
       - CURRENCY_SERVICE_ADDR=currencyservice:7000
-      - CART_SERVICE_ADDR=cartservice:7070
-      - RECOMMENDATION_SERVICE_ADDR=recommendationservice:8080
+      - CART_SERVICE_ADDR=host.docker.internal:7072
+      - RECOMMENDATION_SERVICE_ADDR=localhost:8080
       - SHIPPING_SERVICE_ADDR=shippingservice:50051
       - CHECKOUT_SERVICE_ADDR=checkoutservice:5050
-      - AD_SERVICE_ADDR=adservice:9555
+      - AD_SERVICE_ADDR=localhost:9555
+      - SHOPPING_ASSISTANT_SERVICE_ADDR=localhost:9000
     depends_on:
       - productcatalogservice
       - currencyservice
@@ -42,7 +43,7 @@ services:
   # Product Catalog Service (Go)
   productcatalogservice:
     build:
-      context: ./microservices-demo/src/productcatalogservice
+      context: ./src/productcatalogservice
     ports:
       - "3550:3550"
     environment:
@@ -52,17 +53,19 @@ services:
   # Currency Service (Node.js)
   currencyservice:
     build:
-      context: ./microservices-demo/src/currencyservice
+      context: ./src/currencyservice
     ports:
-      - "7000:7000"
+      - "7001:7000"
     environment:
       - PORT=7000
+      - DISABLE_TRACING=1
+      - DISABLE_PROFILER=1
     restart: unless-stopped
 
   # Shipping Service (Go)
   shippingservice:
     build:
-      context: ./microservices-demo/src/shippingservice
+      context: ./src/shippingservice
     ports:
       - "50051:50051"
     environment:
@@ -72,7 +75,7 @@ services:
   # Checkout Service (Go)
   checkoutservice:
     build:
-      context: ./microservices-demo/src/checkoutservice
+      context: ./src/checkoutservice
     ports:
       - "5050:5050"
     environment:
@@ -80,9 +83,9 @@ services:
       - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
       - SHIPPING_SERVICE_ADDR=shippingservice:50051
       - PAYMENT_SERVICE_ADDR=paymentservice:50051
-      - EMAIL_SERVICE_ADDR=emailservice:5000
+      - EMAIL_SERVICE_ADDR=emailservice:8080
       - CURRENCY_SERVICE_ADDR=currencyservice:7000
-      - CART_SERVICE_ADDR=cartservice:7070
+      - CART_SERVICE_ADDR=host.docker.internal:7072
     depends_on:
       - productcatalogservice
       - shippingservice
@@ -94,19 +97,21 @@ services:
   # Payment Service (Node.js)
   paymentservice:
     build:
-      context: ./microservices-demo/src/paymentservice
+      context: ./src/paymentservice
     ports:
       - "50052:50051"
     environment:
       - PORT=50051
+      - DISABLE_TRACING=1
+      - DISABLE_PROFILER=1
     restart: unless-stopped
 
   # Email Service (Python)
   emailservice:
     build:
-      context: ./microservices-demo/src/emailservice
+      context: ./src/emailservice
     ports:
-      - "5000:8080"
+      - "8000:8080"
     environment:
       - PORT=8080
     restart: unless-stopped
