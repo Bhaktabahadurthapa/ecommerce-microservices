@@ -1,0 +1,64 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ecommerce-project
+  namespace: argocd
+spec:
+  description: "E-commerce Microservices Project"
+  sourceRepos:
+  - 'https://github.com/Bhaktabahadurthapa/ecommerce-microservices'
+  destinations:
+  - namespace: ecommerce-prod
+    server: https://kubernetes.default.svc
+  - namespace: ecommerce-staging
+    server: https://kubernetes.default.svc
+  - namespace: ecommerce-dev
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: ''
+    kind: PersistentVolume
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRoleBinding
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Secret
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: PersistentVolumeClaim
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: extensions
+    kind: Ingress
+  - group: networking.k8s.io
+    kind: Ingress
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: autoscaling
+    kind: HorizontalPodAutoscaler
+  roles:
+  - name: ecommerce-admin
+    description: "Full access to ecommerce applications"
+    policies:
+    - p, proj:ecommerce-project:ecommerce-admin, applications, *, ecommerce-project/*, allow
+    groups:
+    - ecommerce-admins
+  - name: ecommerce-developer
+    description: "Developer access to ecommerce applications"
+    policies:
+    - p, proj:ecommerce-project:ecommerce-developer, applications, get, ecommerce-project/*, allow
+    - p, proj:ecommerce-project:ecommerce-developer, applications, sync, ecommerce-project/ecommerce-microservices-dev, allow
+    groups:
+    - ecommerce-developers

@@ -1,5 +1,6 @@
-# Docker Compose for Microservices Demo E-commerce Application
-# This file orchestrates the essential microservices for the Online Boutique application
+# Docker Compose for Ecommerce Microservices
+# Repository: Bhaktabahadurthapa/ecommerce-microservices
+# Updated for Jenkins CI/CD pipeline integration
 
 services:
   # Redis Cache for Cart Service
@@ -11,6 +12,10 @@ services:
     volumes:
       - redis-data:/data
     restart: unless-stopped
+    labels:
+      - "service=redis"
+      - "environment=development"
+      - "repository=Bhaktabahadurthapa/ecommerce-microservices"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

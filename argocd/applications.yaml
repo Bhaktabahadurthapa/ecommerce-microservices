@@ -1,0 +1,78 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ecommerce-microservices-prod
+  namespace: argocd
+  labels:
+    app: ecommerce-microservices
+    environment: production
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Bhaktabahadurthapa/ecommerce-microservices
+    targetRevision: main
+    path: kubernetes-manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ecommerce-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+  revisionHistoryLimit: 10
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ecommerce-microservices-staging
+  namespace: argocd
+  labels:
+    app: ecommerce-microservices
+    environment: staging
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Bhaktabahadurthapa/ecommerce-microservices
+    targetRevision: develop
+    path: kubernetes-manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ecommerce-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+  revisionHistoryLimit: 5
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ecommerce-microservices-dev
+  namespace: argocd
+  labels:
+    app: ecommerce-microservices
+    environment: development
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Bhaktabahadurthapa/ecommerce-microservices
+    targetRevision: feature/*
+    path: kubernetes-manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ecommerce-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+  revisionHistoryLimit: 3

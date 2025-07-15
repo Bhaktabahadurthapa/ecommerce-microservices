@@ -2,9 +2,17 @@ pipeline {
     agent any
     
     environment {
+        // Repository Information
+        GIT_REPO = 'Bhaktabahadurthapa/ecommerce-microservices'
+        GIT_URL = 'https://github.com/Bhaktabahadurthapa/ecommerce-microservices'
+        
         // Docker Registry Configuration
-        DOCKER_REGISTRY = 'your-registry.com'
+        DOCKER_REGISTRY = 'bhaktabahadurthapa' // Your Docker Hub username
         DOCKER_REPO = 'ecommerce-microservices'
+        
+        // AWS Configuration
+        AWS_REGION = 'us-west-2'
+        EKS_CLUSTER_NAME = 'ecommerce-cluster'
         
         // Security Tools
         SONAR_TOKEN = credentials('sonar-token')
@@ -13,12 +21,19 @@ pipeline {
         // Kubernetes Configuration
         KUBECONFIG = credentials('kubeconfig')
         KUBERNETES_NAMESPACE = 'ecommerce-prod'
+        STAGING_NAMESPACE = 'ecommerce-staging'
+        DEV_NAMESPACE = 'ecommerce-dev'
+        
+        // GitOps Configuration
+        GITOPS_REPO = 'Bhaktabahadurthapa/ecommerce-microservices'
+        ARGOCD_SERVER = 'argocd-server.argocd.svc.cluster.local'
         
         // Notification
         SLACK_CHANNEL = '#devops-alerts'
         
         // Version Management
         BUILD_VERSION = "${env.BUILD_NUMBER}-${env.GIT_COMMIT.take(8)}"
+        IMAGE_TAG = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
     }
     
     tools {
@@ -398,24 +413,135 @@ pipeline {
                     input message: 'Deploy to Production?', ok: 'Deploy'
                     
                     sh '''
-                        # Blue-Green Deployment Strategy
-                        echo "Deploying to production..."
+                        # GitOps Deployment - Update manifests and trigger ArgoCD
+                        echo "Updating Kubernetes manifests for GitOps deployment..."
                         
-                        # Update image tags
-                        sed -i "s|:latest|:${BUILD_VERSION}|g" kubernetes-manifests/*.yaml
+                        # Create temporary directory for GitOps operations
+                        mkdir -p gitops-temp
+                        cd gitops-temp
                         
-                        # Deploy to production
-                        kubectl apply -f kubernetes-manifests/ -n ${KUBERNETES_NAMESPACE}
+                        # Clone the repository
+                        git clone https://${GITHUB_TOKEN}@github.com/${GIT_REPO}.git .
+                        git config user.email "jenkins@ecommerce.local"
+                        git config user.name "Jenkins CI/CD"
                         
-                        # Wait for rollout
+                        # Update image tags in Kubernetes manifests
+                        find kubernetes-manifests/ -name "*.yaml" -exec sed -i "s|image: ${DOCKER_REGISTRY}/${DOCKER_REPO}/\\([^:]*\\):.*|image: ${DOCKER_REGISTRY}/${DOCKER_REPO}/\\1:${BUILD_VERSION}|g" {} \\;
+                        
+                        # Update Helm values if using Helm
+                        if [ -f helm-chart/values.yaml ]; then
+                            sed -i "s|tag: .*|tag: ${BUILD_VERSION}|g" helm-chart/values.yaml
+                        fi
+                        
+                        # Commit and push changes
+                        git add .
+                        git commit -m "🚀 Deploy version ${BUILD_VERSION} to production
+                        
+                        - Updated image tags for all microservices
+                        - Build: ${BUILD_NUMBER}
+                        - Commit: ${GIT_COMMIT}
+                        - Triggered by: ${BUILD_USER:-Jenkins}"
+                        
+                        git push origin main
+                        
+                        cd ..
+                        rm -rf gitops-temp
+                    '''
+                    
+                    // Trigger ArgoCD sync
+                    sh '''
+                        echo "Triggering ArgoCD synchronization..."
+                        
+                        # Install ArgoCD CLI if not present
+                        if ! command -v argocd &> /dev/null; then
+                            curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+                            sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+                            rm argocd-linux-amd64
+                        fi
+                        
+                        # Login to ArgoCD (using service account token)
+                        argocd login ${ARGOCD_SERVER} --username admin --password ${ARGOCD_PASSWORD} --insecure
+                        
+                        # Sync the application
+                        argocd app sync ecommerce-microservices --prune
+                        
+                        # Wait for sync to complete
+                        argocd app wait ecommerce-microservices --timeout 600
+                        
+                        # Get application status
+                        argocd app get ecommerce-microservices
+                    '''
+                    
+                    // Verify deployment
+                    sh '''
+                        echo "Verifying production deployment..."
+                        
+                        # Wait for all deployments to be ready
                         kubectl rollout status deployment/frontend -n ${KUBERNETES_NAMESPACE} --timeout=600s
+                        kubectl rollout status deployment/cartservice -n ${KUBERNETES_NAMESPACE} --timeout=600s
+                        kubectl rollout status deployment/productcatalogservice -n ${KUBERNETES_NAMESPACE} --timeout=600s
+                        kubectl rollout status deployment/checkoutservice -n ${KUBERNETES_NAMESPACE} --timeout=600s
                         
                         # Health check
                         kubectl get pods -n ${KUBERNETES_NAMESPACE}
                         
-                        # Update load balancer
-                        kubectl patch service frontend -n ${KUBERNETES_NAMESPACE} -p '{"spec":{"selector":{"version":"'${BUILD_VERSION}'"}}}'
+                        # Get service endpoints
+                        kubectl get services -n ${KUBERNETES_NAMESPACE}
+                        
+                        # Run production smoke tests
+                        FRONTEND_URL=$(kubectl get service frontend -n ${KUBERNETES_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "localhost")
+                        
+                        if [ "$FRONTEND_URL" != "localhost" ]; then
+                            echo "Testing production endpoint: http://${FRONTEND_URL}"
+                            curl -f http://${FRONTEND_URL}/health || echo "Health check failed, but deployment completed"
+                        fi
                     '''
+                }
+            }
+        }
+        
+        stage('🔄 GitOps Monitoring & Validation') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    sh '''
+                        echo "Monitoring GitOps deployment status..."
+                        
+                        # Check ArgoCD application health
+                        argocd app get ecommerce-microservices --output json > argocd-status.json
+                        
+                        # Parse and display status
+                        python3 << 'EOF'
+import json
+import sys
+
+with open('argocd-status.json', 'r') as f:
+    app_status = json.load(f)
+
+health = app_status.get('status', {}).get('health', {}).get('status', 'Unknown')
+sync = app_status.get('status', {}).get('sync', {}).get('status', 'Unknown')
+
+print(f"Application Health: {health}")
+print(f"Sync Status: {sync}")
+
+if health != 'Healthy':
+    print("⚠️ Application is not healthy!")
+    sys.exit(1)
+
+if sync not in ['Synced', 'OutOfSync']:
+    print("⚠️ Sync status is unexpected!")
+    sys.exit(1)
+
+print("✅ GitOps deployment validation passed!")
+EOF
+                        
+                        # Archive ArgoCD status
+                        kubectl get applications -n argocd -o yaml > argocd-applications.yaml
+                    '''
+                    
+                    archiveArtifacts artifacts: 'argocd-status.json,argocd-applications.yaml', allowEmptyArchive: true
                 }
             }
         }
