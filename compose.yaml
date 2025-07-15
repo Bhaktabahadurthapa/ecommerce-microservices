@@ -1,0 +1,123 @@
+# Docker Compose for Microservices Demo E-commerce Application
+# This file orchestrates the essential microservices for the Online Boutique application
+
+services:
+  # Redis Cache for Cart Service
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Frontend - Web UI (Go)
+  frontend:
+    build:
+      context: ./microservices-demo/src/frontend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - CART_SERVICE_ADDR=cartservice:7070
+      - RECOMMENDATION_SERVICE_ADDR=recommendationservice:8080
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - CHECKOUT_SERVICE_ADDR=checkoutservice:5050
+      - AD_SERVICE_ADDR=adservice:9555
+    depends_on:
+      - productcatalogservice
+      - currencyservice
+      - shippingservice
+      - checkoutservice
+    restart: unless-stopped
+
+  # Product Catalog Service (Go)
+  productcatalogservice:
+    build:
+      context: ./microservices-demo/src/productcatalogservice
+    ports:
+      - "3550:3550"
+    environment:
+      - PORT=3550
+    restart: unless-stopped
+
+  # Currency Service (Node.js)
+  currencyservice:
+    build:
+      context: ./microservices-demo/src/currencyservice
+    ports:
+      - "7000:7000"
+    environment:
+      - PORT=7000
+    restart: unless-stopped
+
+  # Shipping Service (Go)
+  shippingservice:
+    build:
+      context: ./microservices-demo/src/shippingservice
+    ports:
+      - "50051:50051"
+    environment:
+      - PORT=50051
+    restart: unless-stopped
+
+  # Checkout Service (Go)
+  checkoutservice:
+    build:
+      context: ./microservices-demo/src/checkoutservice
+    ports:
+      - "5050:5050"
+    environment:
+      - PORT=5050
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - PAYMENT_SERVICE_ADDR=paymentservice:50051
+      - EMAIL_SERVICE_ADDR=emailservice:5000
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - CART_SERVICE_ADDR=cartservice:7070
+    depends_on:
+      - productcatalogservice
+      - shippingservice
+      - paymentservice
+      - emailservice
+      - currencyservice
+    restart: unless-stopped
+
+  # Payment Service (Node.js)
+  paymentservice:
+    build:
+      context: ./microservices-demo/src/paymentservice
+    ports:
+      - "50052:50051"
+    environment:
+      - PORT=50051
+    restart: unless-stopped
+
+  # Email Service (Python)
+  emailservice:
+    build:
+      context: ./microservices-demo/src/emailservice
+    ports:
+      - "5000:8080"
+    environment:
+      - PORT=8080
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  redis-data:
+    driver: local
+
+# Networks (using default network for simplicity)
+networks:
+  default:
+    driver: bridge
+
