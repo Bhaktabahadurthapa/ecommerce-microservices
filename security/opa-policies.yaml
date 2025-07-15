@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-policies
+  namespace: ecommerce-prod
+data:
+  # Container Security Policies
+  container-security.yaml: |
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: disallow-privileged-containers
+    spec:
+      validationFailureAction: enforce
+      background: false
+      rules:
+      - name: check-privileged
+        match:
+          resources:
+            kinds:
+            - Pod
+        validate:
+          message: "Privileged containers are not allowed"
+          pattern:
+            spec:
+              =(securityContext):
+                =(privileged): "false"
+              containers:
+              - name: "*"
+                =(securityContext):
+                  =(privileged): "false"
+
+  # Image Security Policy
+  image-security.yaml: |
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: disallow-latest-tag
+    spec:
+      validationFailureAction: enforce
+      background: false
+      rules:
+      - name: require-image-tag
+        match:
+          resources:
+            kinds:
+            - Pod
+        validate:
+          message: "Images must not use 'latest' tag"
+          pattern:
+            spec:
+              containers:
+              - name: "*"
+                image: "!*:latest"
+
+  # Resource Limits Policy
+  resource-limits.yaml: |
+    apiVersion: kyverno.io/v1
+    kind: ClusterPolicy
+    metadata:
+      name: require-pod-resources
+    spec:
+      validationFailureAction: enforce
+      background: false
+      rules:
+      - name: validate-resources
+        match:
+          resources:
+            kinds:
+            - Pod
+        validate:
+          message: "Resource requests and limits are required"
+          pattern:
+            spec:
+              containers:
+              - name: "*"
+                resources:
+                  requests:
+                    memory: "?*"
+                    cpu: "?*"
+                  limits:
+                    memory: "?*"
+                    cpu: "?*"
