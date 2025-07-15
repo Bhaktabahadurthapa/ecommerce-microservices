@@ -17,6 +17,19 @@ services:
       timeout: 3s
       retries: 5
 
+  # Cart Service (C#/.NET)
+  cartservice:
+    build:
+      context: ./src/cartservice/src
+    ports:
+      - "7070:7070"
+    environment:
+      - PORT=7070
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+
   # Frontend - Web UI (Go)
   frontend:
     build:
@@ -27,7 +40,7 @@ services:
       - PORT=8080
       - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
       - CURRENCY_SERVICE_ADDR=currencyservice:7000
-      - CART_SERVICE_ADDR=host.docker.internal:7072
+      - CART_SERVICE_ADDR=cartservice:7070
       - RECOMMENDATION_SERVICE_ADDR=localhost:8080
       - SHIPPING_SERVICE_ADDR=shippingservice:50051
       - CHECKOUT_SERVICE_ADDR=checkoutservice:5050
@@ -36,6 +49,7 @@ services:
     depends_on:
       - productcatalogservice
       - currencyservice
+      - cartservice
       - shippingservice
       - checkoutservice
     restart: unless-stopped
@@ -85,13 +99,14 @@ services:
       - PAYMENT_SERVICE_ADDR=paymentservice:50051
       - EMAIL_SERVICE_ADDR=emailservice:8080
       - CURRENCY_SERVICE_ADDR=currencyservice:7000
-      - CART_SERVICE_ADDR=host.docker.internal:7072
+      - CART_SERVICE_ADDR=cartservice:7070
     depends_on:
       - productcatalogservice
       - shippingservice
       - paymentservice
       - emailservice
       - currencyservice
+      - cartservice
     restart: unless-stopped
 
   # Payment Service (Node.js)
